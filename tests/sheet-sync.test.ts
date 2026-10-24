@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseSheetExpenseRow } from "../src/google-sheets";
 import { lastThreeDaysFlex, todayFlex } from "../src/line";
+import { sheetSourceKey } from "../src/sheet-sync";
 
 const dates = new Set(["2026-10-22", "2026-10-23", "2026-10-24"]);
 
@@ -39,5 +40,10 @@ describe("Google Sheet expense sync parsing", () => {
     expect(message.type).toBe("flex");
     expect(message.altText).toContain("NT$ 105");
     expect(message.contents?.body?.contents?.length).toBeGreaterThan(0);
+  });
+
+  it("uses a stable sheet row source key for idempotent sync", () => {
+    expect(sheetSourceKey(12345, 82)).toBe("sheet:12345:82");
+    expect(sheetSourceKey(12345, 82)).toBe(sheetSourceKey(12345, 82));
   });
 });

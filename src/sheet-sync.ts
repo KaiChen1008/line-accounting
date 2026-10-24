@@ -1,6 +1,6 @@
-import { readExpenseRows, type SheetExpenseRow } from "./google-sheets";
+import { readExpenseRows } from "./google-sheets";
+import { MAX_QUERY_DAYS } from "./expense-query";
 import type { Env } from "./types";
-import { isCategory } from "./types";
 import { addDays, nowIso, taipeiDate } from "./utils";
 
 export interface SheetSyncResult {
@@ -16,13 +16,16 @@ export async function syncRecentSheetExpenses(
   env: Env,
   lineUserId: string,
   endDate = taipeiDate(),
+  days = 5,
 ): Promise<SheetSyncResult> {
-  const startDate = addDays(endDate, -2);
-  const sheet = await readExpenseRows(env, lineUserId, new Set([startDate, addDays(endDate, -1), endDate]));
+  if (!Number.isInteger(days) || days < 1 || days > MAX_QUERY_DAYS) throw new Error(`同步期限最多 ${MAX_QUERY_DAYS} 天`);
+  const startDate = addDays(endDate, -(days - 1));
+  const dates = new Set(Array.from({ length: days }, (_, offset) => addDays(startDate, offset)));
+  const sheet = await readExpenseRows(env, lineUserId, dates);
   let syncedRows = 0;
 
   for (const row of sheet.rows) {
-    const sourceKey = `sheet:${sheet.sheetId}:${row.rowNumber}`;
+    const sourceKey = sheetSourceKey(sheet.sheetId, row.rowNumber);
     const batchId = `sheet-sync-${sheet.sheetId}-${row.rowNumber}`;
     const draftId = `sheet-import:${sourceKey}`;
     const now = nowIso();
@@ -62,6 +65,10 @@ export async function syncRecentSheetExpenses(
     syncedRows,
     invalidRows: sheet.invalidRows,
   };
+}
+
+export function sheetSourceKey(sheetId: number, rowNumber: number): string {
+  return `sheet:${sheetId}:${rowNumber}`;
 }
 
 export function formatSheetSyncResult(result: SheetSyncResult): string {

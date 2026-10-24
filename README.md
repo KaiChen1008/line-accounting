@@ -15,7 +15,7 @@ A LINE accounting bot built with Cloudflare Workers and TypeScript. Text message
 - Resolve the existing Google Sheet tab from its `gid`, then append only columns A–E with `values.append`.
 - Provision a dedicated Google Sheet tab per LINE user. Existing users keep the configured legacy tab; new users receive a `user_xxxxxx` tab on `follow`, or on their first write, query, or sync if no `follow` event was received.
 - Query today's total or any custom date range up to 31 calendar days, with a daily breakdown and zero-filled days.
-- Sync the latest three calendar days from Google Sheets back into D1 using sheet row numbers as source keys without deleting existing D1 records.
+- Sync the latest five calendar days from Google Sheets back into D1 using sheet row numbers as unique source keys without creating duplicate D1 records. The legacy three-day sync command remains supported.
 
 ## Architecture
 
@@ -108,6 +108,8 @@ The bot accepts natural-language date ranges up to 31 calendar days. Examples:
 ```
 
 The backend calculates all totals from D1 and returns one row per day, including days with no expenses. The original today and recent-three-day queries remain supported. Requests longer than 31 days are rejected and do not query the database.
+
+To synchronize the Google Sheet ledger back into D1, send `同步最近五天`. The previous `同步最近三天` command remains supported. Each imported row uses `sheet:<sheet_gid>:<row_number>` as a unique source key, so repeating a sync updates the existing D1 record instead of inserting a duplicate.
 
 ## Security notes
 
