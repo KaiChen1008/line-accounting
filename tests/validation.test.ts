@@ -18,7 +18,7 @@ describe("AI output validation", () => {
     const result = validateAndNormalizeResult({
       intent: "record",
       status: "ready",
-      entries: [{ amount: 60, amount_expression: null, item: "咖啡", category: "咖啡 ☕", date: null }],
+      entries: [{ amount: 60, amount_expression: null, item: "咖啡", category: "咖啡 ☕️", date: null }],
       start_date: null,
       end_date: null,
       missing_info: [],
@@ -26,7 +26,7 @@ describe("AI output validation", () => {
     }, "2026-10-23");
     expect(result.missingInfo).toEqual([]);
     expect(result.entries[0].date).toBe("2026-10-23");
-    expect(result.entries[0].category).toBe("咖啡 ☕");
+    expect(result.entries[0].category).toBe("咖啡 ☕️");
   });
 
   it("does not treat an unresolved amount as ready", () => {

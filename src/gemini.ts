@@ -35,12 +35,14 @@ const responseSchema = {
 } as Record<string, unknown>;
 
 function systemPrompt(currentDate: string, pendingDraft: unknown): string {
-  return `你是台灣使用者的記帳資料解析器。只回傳符合 JSON Schema 的 JSON，不要 Markdown，不要解釋。
+  return `
+你是專為台灣使用者打造的記帳資料解析器。支援記帳、查詢、補充、修改、取消草稿等功能。請依照使用者輸入的文字或收據照片，解析出支出品名、金額、分類、日期等資訊，並回傳 JSON。請注意以下規則：
 CURRENT_DATE_TAIPEI=${currentDate}
+只回傳符合 JSON Schema 的 JSON，不要 Markdown，不要解釋。
 所有未指定日期的支出使用 CURRENT_DATE_TAIPEI；昨天、前天依此日期計算，日期輸出 YYYY-MM-DD。年份不明確或日期衝突時，status=needs_clarification。
-所有查詢意圖一律使用 intent=query_expense_range；請根據使用者原始訊息與 CURRENT_DATE_TAIPEI，直接計算並回傳 start_date、end_date，格式為 YYYY-MM-DD。相對日期例如今天、昨天、最近 7 天、本月，都要先換算成實際日期；日期不明確時回傳 null 並使用 status=needs_clarification。非查詢意圖的 start_date、end_date 必須回傳 null。後端只會驗證 AI 回傳的日期格式與最多 31 天限制，不會再次解析原始文字，也不負責加總。
-只允許以下分類完整字串：食物 🍽️、飲品 🧃、咖啡 ☕、交通 🚌、消費 👜、娛樂 🎳、居家 🏡、3C 📱、醫藥 🏥、房租 🏠、其他 🏷️。
-咖啡原則上分類為咖啡 ☕；任何「請 貝 ...」項目一律分類為消費 👜，且保留原始品名；全聯的水+紅茶+牛奶、綠茶+水等飲用組合分類居家 🏡；游泳、教練課分類娛樂 🎳。
+所有查詢一律使用 intent=query_expense_range；請根據使用者原始訊息與 CURRENT_DATE_TAIPEI，直接計算並回傳 start_date、end_date，格式為 YYYY-MM-DD。相對日期例如今天、昨天、最近 7 天、本月，都要先換算成實際日期；日期不明確時回傳 null 並使用 status=needs_clarification。非查詢意圖的 start_date、end_date 必須回傳 null。
+只允許以下分類完整字串：食物 🍽️、飲品 🧃、咖啡 ☕️、交通 🚌、消費 👜、娛樂 🎳、居家 🏡、3C 📱、醫藥 🏥、房租 🏠、其他 🏷️。
+咖啡原則上分類為咖啡 ☕️；任何「請 貝 ...」項目一律分類為消費 👜，且保留原始品名；全聯的水+紅茶+牛奶、綠茶+水等飲用組合分類居家 🏡；游泳、教練課分類消費 👜。
 品名保留使用者原始輸入，不要改寫。支援多行、多筆支出。amount_expression 只保存使用者明確寫出的算式，例如 306+240、1430/2；後端會計算，無法辨識或不確定的金額必須是 null 並詢問，不能猜。
 若目前有待確認草稿，使用者的訊息通常是對該草稿的補充或修改；只修改指定欄位，並回傳套用後的完整 entries。若修改對象或內容不明確，status=needs_clarification 並提出具體 question。若訊息是全新獨立支出，仍回傳 record，但由後端阻擋並請使用者先完成或取消舊草稿。
 目前待確認草稿：${JSON.stringify(pendingDraft ?? null)}`;
@@ -78,13 +80,13 @@ export async function parseWithGemini(
 
 async function requestGeminiModel(env: Env, model: string, parts: Array<Record<string, unknown>>): Promise<AiParseResult> {
   const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts }],
-        generationConfig: { responseMimeType: "application/json", responseSchema },
-      }),
-    }, EXTERNAL_API_TIMEOUT_MS, "Gemini API timeout");
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts }],
+      generationConfig: { responseMimeType: "application/json", responseSchema },
+    }),
+  }, EXTERNAL_API_TIMEOUT_MS, "Gemini API timeout");
   if (!response.ok) throw new Error(`Gemini API error ${response.status}`);
   const payload = await withTimeout(response.json() as Promise<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>, EXTERNAL_API_TIMEOUT_MS, "Gemini API response timeout");
   const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
