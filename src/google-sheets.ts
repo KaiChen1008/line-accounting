@@ -11,6 +11,8 @@ interface ServiceAccount {
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
 async function accessToken(env: Env): Promise<string> {
+  // Workers do not have a Google SDK here, so authenticate with a short-lived
+  // service-account JWT and cache the resulting access token in memory.
   if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.value;
   const account = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON) as ServiceAccount;
   const header = base64UrlEncode(JSON.stringify({ alg: "RS256", typ: "JWT" }));
@@ -47,6 +49,7 @@ function base64ToBytes(value: string): ArrayBuffer {
 }
 
 async function sheetsRequest(env: Env, url: string, init: RequestInit = {}): Promise<Response> {
+  // Centralize authorization and timeouts for every Sheets API request.
   const token = await accessToken(env);
   const headers = new Headers(init.headers);
   headers.set("authorization", `Bearer ${token}`);
@@ -93,6 +96,8 @@ export class SheetWriteError extends Error {
 }
 
 export async function appendExpenses(env: Env, lineUserId: string, entries: ExpenseEntry[]): Promise<SheetAppendResult> {
+  // Each user writes to a dedicated tab. The five columns match the sheet
+  // header: expense date, amount, item, category, and record date.
   const sheet = await ensureUserSheet(env, lineUserId);
   const title = sheet.title;
   const range = `${title}!A:E`;
@@ -126,6 +131,8 @@ export interface SheetReadResult {
 }
 
 export async function readExpenseRows(env: Env, lineUserId: string, dates: Set<string>): Promise<SheetReadResult> {
+  // Read the tab once, then filter and validate rows locally. This avoids one
+  // API request per date and lets the sync report malformed rows precisely.
   const sheet = await ensureUserSheet(env, lineUserId);
   const title = sheet.title;
   const range = `${title}!A:E`;
@@ -149,6 +156,8 @@ export async function readExpenseRows(env: Env, lineUserId: string, dates: Set<s
 }
 
 export async function ensureUserSheet(env: Env, lineUserId: string): Promise<SheetTab> {
+  // Provisioning is guarded by a D1 claim so concurrent LINE events cannot
+  // create duplicate tabs for the same user.
   const existing = await userSheetMapping(env, lineUserId);
   if (existing) return existing;
 
@@ -171,6 +180,8 @@ export async function ensureUserSheet(env: Env, lineUserId: string): Promise<She
     const hasExistingData = await env.DB.prepare("SELECT 1 AS found FROM commit_batches WHERE line_user_id=?1 LIMIT 1")
       .bind(lineUserId).first<{ found: number }>();
     if (hasExistingData) {
+      // Existing users keep the configured default tab for backward
+      // compatibility; new users receive a private tab.
       const existingDefault = await defaultSheet(env);
       const inserted = await env.DB.prepare("INSERT OR IGNORE INTO user_sheet_tabs (line_user_id,sheet_id,sheet_title,created_at) VALUES (?1,?2,?3,?4)")
         .bind(lineUserId, existingDefault.sheetId, existingDefault.title, now).run();
@@ -232,6 +243,8 @@ type ParsedSheetExpenseRow =
   | { kind: "valid"; row: SheetExpenseRow };
 
 export function parseSheetExpenseRow(rowNumber: number, values: unknown[], dates: Set<string>): ParsedSheetExpenseRow {
+  // Treat headers and dates outside the requested range as normal input, not
+  // errors, while reporting rows that look like expenses but are malformed.
   const rawDate = String(values[0] ?? "").trim();
   const rawAmount = String(values[1] ?? "").trim();
   const item = String(values[2] ?? "").trim();

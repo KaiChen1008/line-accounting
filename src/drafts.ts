@@ -11,6 +11,8 @@ function draftKey(draftId: string): string {
 }
 
 export async function loadPendingDraft(env: Env, userId: string): Promise<Draft | null> {
+  // Keep one pointer per user for fast lookup, while also storing drafts by
+  // ID so old postback buttons can still be validated safely.
   const draft = await loadDraft(env, await env.DRAFTS.get(pendingKey(userId), "json"));
   if (!draft) return null;
   if (isExpired(draft.expires_at)) {
@@ -35,6 +37,8 @@ async function loadDraft(env: Env, raw: unknown): Promise<Draft | null> {
 }
 
 export async function saveDraft(env: Env, draft: Draft): Promise<void> {
+  // Both keys share the same TTL and payload so reads from either path stay
+  // consistent until the draft expires.
   const ttl = Math.max(60, Math.floor((Date.parse(draft.expires_at) - Date.now()) / 1000));
   await Promise.all([
     env.DRAFTS.put(pendingKey(draft.line_user_id), JSON.stringify(draft), { expirationTtl: ttl }),

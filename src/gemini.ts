@@ -4,6 +4,9 @@ import { fetchWithTimeout, withTimeout } from "./utils";
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 const FALLBACK_GEMINI_MODEL = "gemini-3.5-flash-lite";
+
+// Gemini must return a predictable structure; application validation still
+// treats the model response as untrusted input.
 const responseSchema = {
   type: "OBJECT",
   properties: {
@@ -47,6 +50,7 @@ export async function parseWithGemini(
   currentDate: string,
   pendingDraft?: unknown,
 ): Promise<AiParseResult> {
+  // Text and receipt images share the same prompt and structured output path.
   const parts: Array<Record<string, unknown>> = [
     { text: `${systemPrompt(currentDate, pendingDraft)}\n使用者輸入：${input.text || "（收據照片，請辨識）"}` },
   ];
@@ -62,6 +66,7 @@ export async function parseWithGemini(
     try {
       return await requestGeminiModel(env, model, parts);
     } catch (error) {
+      // Try the fallback model for transient model-specific failures.
       lastError = error;
       console.warn(`Gemini model failed: ${model}`, error instanceof Error ? error.message : "unknown error");
     }

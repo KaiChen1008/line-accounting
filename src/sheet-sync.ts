@@ -17,6 +17,8 @@ export async function syncRecentSheetExpenses(
   lineUserId: string,
   endDate = taipeiDate(),
 ): Promise<SheetSyncResult> {
+  // Import only the latest three calendar days. The source key is stable for
+  // a physical sheet row, so rerunning the command updates instead of duplicates.
   const startDate = addDays(endDate, -2);
   const sheet = await readExpenseRows(env, lineUserId, new Set([startDate, addDays(endDate, -1), endDate]));
   let syncedRows = 0;

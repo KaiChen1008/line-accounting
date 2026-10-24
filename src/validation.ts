@@ -30,6 +30,8 @@ class ExpressionParser {
     return result;
   }
 
+  // Standard operator precedence: multiplication/division before addition/
+  // subtraction, with unary signs and parentheses handled at the bottom.
   private parseAddSub(): number {
     let result = this.parseMulDiv();
     while (this.index < this.tokens.length && ["+", "-"].includes(this.tokens[this.index])) {
@@ -71,6 +73,8 @@ class ExpressionParser {
 }
 
 export function calculateExpression(expression: string): number {
+  // Expressions are evaluated locally instead of asking Gemini to calculate
+  // them, which makes arithmetic deterministic and bounded.
   const normalized = expression.trim();
   if (!/^[\d\s()+\-*/.]+$/.test(normalized) || normalized.length > 100) throw new Error("算式格式無效");
   const value = new ExpressionParser(normalized).parse();
@@ -105,6 +109,8 @@ function normalizeAmount(entry: ExpenseEntry): { amount: number | null; error?: 
 }
 
 export function validateAndNormalizeResult(result: AiParseResult, currentDate = taipeiDate()): ValidationResult {
+  // Normalize untrusted model output into the small shape used by drafts and
+  // reject missing or invalid fields before anything reaches D1 or Sheets.
   const missingInfo = Array.isArray(result.missing_info) ? result.missing_info.filter((item) => typeof item === "string") : [];
   const entries = Array.isArray(result.entries) ? result.entries.slice(0, MAX_ENTRIES_PER_DRAFT) : [];
   const normalized: ExpenseEntry[] = [];

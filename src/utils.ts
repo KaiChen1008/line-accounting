@@ -1,6 +1,8 @@
 import { TAIPEI_TIME_ZONE } from "./constants";
 
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  // Cloudflare Workers do not automatically time out outbound promises;
+  // explicitly race them so a stalled provider cannot hold the event open.
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
@@ -30,6 +32,7 @@ export function nowIso(): string {
 }
 
 export function taipeiDate(date = new Date()): string {
+  // Expense dates follow Taiwan time even when the Worker executes elsewhere.
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: TAIPEI_TIME_ZONE,
     year: "numeric",
@@ -41,6 +44,7 @@ export function taipeiDate(date = new Date()): string {
 }
 
 export function addDays(date: string, days: number): string {
+  // Use UTC arithmetic to avoid daylight-saving or local-time shifts.
   const [year, month, day] = date.split("-").map(Number);
   const value = new Date(Date.UTC(year, month - 1, day));
   value.setUTCDate(value.getUTCDate() + days);
@@ -88,6 +92,7 @@ export async function hmacSha256(secret: string, value: string): Promise<string>
 }
 
 export async function hmacSha256Base64(secret: string, value: string): Promise<string> {
+  // LINE signatures use standard Base64, unlike the URL-safe encoding above.
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -102,6 +107,7 @@ export async function hmacSha256Base64(secret: string, value: string): Promise<s
 }
 
 export function constantTimeEqual(left: string, right: string): boolean {
+  // Compare every character when lengths match to reduce timing leakage.
   if (left.length !== right.length) return false;
   let result = 0;
   for (let index = 0; index < left.length; index += 1) result |= left.charCodeAt(index) ^ right.charCodeAt(index);

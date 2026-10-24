@@ -14,6 +14,8 @@ export const CATEGORIES = [
 
 export type Category = (typeof CATEGORIES)[number];
 
+// Keep category validation centralized so Gemini output and Sheet input use the
+// exact same allowed labels.
 export function isCategory(value: string): value is Category {
   return CATEGORIES.includes(value as Category);
 }
@@ -61,6 +63,7 @@ export interface Draft {
 }
 
 export interface Env {
+  // These fields are supplied by Wrangler bindings or encrypted Worker secrets.
   DB: D1Database;
   DRAFTS: KVNamespace;
   LINE_CHANNEL_SECRET: string;

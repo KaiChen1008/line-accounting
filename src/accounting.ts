@@ -22,6 +22,8 @@ export interface CommitResult {
 }
 
 export async function commitDraft(env: Env, draft: Draft): Promise<CommitResult> {
+  // The batch row is the idempotency record for a draft. It lets repeated
+  // button clicks return the original result instead of appending again.
   const existing = await env.DB.prepare("SELECT * FROM commit_batches WHERE draft_id = ?1").bind(draft.draft_id).first<BatchRow>();
   if (existing?.status === "completed") {
     return { kind: "completed", batchId: existing.batch_id, entries: await readBatchEntries(env.DB, existing.batch_id) };
@@ -55,6 +57,8 @@ export async function commitDraft(env: Env, draft: Draft): Promise<CommitResult>
   }
 
   try {
+    // Save the D1 rows first, then append the same entries to Google Sheets.
+    // Finalization below records whether both sides completed successfully.
     await insertExpenseRecords(env.DB, batchId, draft);
     const sheetResult = await appendExpenses(env, draft.line_user_id, draft.entries);
     const completedAt = nowIso();
@@ -133,6 +137,8 @@ export async function queryLastThreeDays(env: Env, userId: string, dates: string
 }
 
 export async function queryExpenseRange(env: Env, userId: string, startDate: string, endDate: string): Promise<Array<{ date: string; total: number; count: number }>> {
+  // The limit is enforced here as a second line of defense after parsing the
+  // user's message, so callers cannot accidentally run an unbounded query.
   const days = dateDistance(startDate, endDate) + 1;
   if (days < 1 || days > MAX_QUERY_DAYS) throw new Error(`查詢期限最多 ${MAX_QUERY_DAYS} 天`);
 
@@ -140,6 +146,7 @@ export async function queryExpenseRange(env: Env, userId: string, startDate: str
     .bind(userId, startDate, endDate).all<{ date: string; total: number; count: number }>();
   const byDate = new Map(rows.results.map((row) => [row.date, { date: row.date, total: Number(row.total), count: Number(row.count) }]));
   const results: Array<{ date: string; total: number; count: number }> = [];
+  // Fill missing dates with zeroes to keep the response shape predictable.
   for (let offset = 0; offset < days; offset += 1) {
     const date = addDays(startDate, offset);
     results.push(byDate.get(date) || { date, total: 0, count: 0 });

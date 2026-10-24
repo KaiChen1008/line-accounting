@@ -22,6 +22,7 @@ export interface TodayExpenseSummary {
 }
 
 async function lineRequest(env: Env, path: string, body: unknown): Promise<void> {
+  // Keep all LINE Messaging API calls behind one timeout and error handler.
   const response = await fetchWithTimeout(`https://api.line.me${path}`, {
       method: "POST",
       headers: { authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`, "content-type": "application/json" },
@@ -59,6 +60,8 @@ function entryLine(entry: ExpenseEntry, index: number): unknown {
 }
 
 export function draftFlex(draft: Draft): LineMessage {
+  // The same draft card is used for both incomplete drafts and drafts ready
+  // for confirmation; only the confirmation button state changes.
   const total = draft.entries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
   const canConfirm = draft.status === "pending_confirmation";
   return {
@@ -147,6 +150,7 @@ export function todayFlex(result: TodayExpenseSummary): LineMessage {
 }
 
 export function periodExpenseFlex(results: DailyExpenseSummary[]): LineMessage {
+  // The bar chart uses the largest daily total as its 100% reference point.
   const total = results.reduce((sum, row) => sum + row.total, 0);
   const max = Math.max(...results.map((row) => row.total), 1);
   const dayLabel = `${results.length} 天`;

@@ -37,6 +37,8 @@ const CHINESE_NUMBERS: Record<string, number> = {
 };
 
 export function parseExpenseQuery(input: string, currentDate: string): ParsedExpenseQuery | null {
+  // Parse the most specific forms first: explicit ranges, month queries,
+  // relative day counts, and finally single dates.
   if (!QUERY_REQUEST_WORDS.test(input) && !(EXPENSE_WORDS.test(input) && PERIOD_WORDS.test(input))) return null;
 
   const explicitRange = input.match(DATE_RANGE_PATTERN);
@@ -75,6 +77,8 @@ export function parseExpenseQuery(input: string, currentDate: string): ParsedExp
 }
 
 function makeRelativeRange(endDate: string, days: number, offset = 0): ParsedExpenseQuery {
+  // A relative range is inclusive of its end date. For example, seven days
+  // ending today starts six days before today.
   if (!Number.isInteger(days) || days < 1 || days > MAX_QUERY_DAYS) return { error: `查詢期限最多 ${MAX_QUERY_DAYS} 天，請縮短日期範圍。` };
   const adjustedEnd = addDays(endDate, offset);
   return makeRange(addDays(adjustedEnd, -(days - 1)), adjustedEnd);
@@ -88,6 +92,7 @@ function makeRange(startDate: string, endDate: string): ParsedExpenseQuery {
 }
 
 function parseChineseNumber(value: string): number | null {
+  // Support the common Chinese forms used in chat, such as 三天 and 十四天.
   if (/^\d+$/.test(value)) return Number(value);
   if (value === "十") return 10;
   if (value.length === 2 && value[0] === "十") return 10 + (CHINESE_NUMBERS[value[1]] || 0);

@@ -9,6 +9,8 @@ import type { AiParseResult, Draft, Env, LineEvent, LineWebhookBody } from "./ty
 import { addDays, constantTimeEqual, hmacSha256Base64, nowIso, taipeiDate } from "./utils";
 import { validateAndNormalizeResult } from "./validation";
 
+// The Worker only accepts signed LINE webhooks and performs the actual event
+// processing in the background so LINE receives a quick acknowledgement.
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -36,6 +38,8 @@ async function processEvent(event: LineEvent, env: Env): Promise<void> {
   const eventId = event.webhookEventId;
   let stage = "claim_event";
   try {
+    // Claim the event before handling it. LINE may retry the same webhook, so
+    // this prevents duplicate replies and duplicate writes.
     if (eventId && !(await claimWebhookEvent(env, eventId))) return;
     stage = "handle_event";
     await handleEvent(event, env);
@@ -102,6 +106,8 @@ async function handleEvent(event: LineEvent, env: Env): Promise<void> {
 
   const messageType = event.message?.type;
   const pending = await loadPendingDraft(env, userId);
+  // A pending draft must be resolved before accepting another receipt image;
+  // otherwise two receipts could be merged into one ambiguous draft.
   if (pending && messageType === "image") {
     await reply(env, event.replyToken, [{ type: "text", text: "目前有一筆待確認草稿。請先按「確認寫入」或「取消」，再傳送新的收據照片。" }]);
     return;
@@ -132,6 +138,7 @@ async function handleText(env: Env, userId: string, replyToken: string, messageT
   }
 
   const currentDate = taipeiDate();
+  // The explicit sync command is handled before the general query parser.
   if (/^同步(最近)?三天(?:開銷|支出)?$/.test(messageText)) {
     const result = await syncRecentSheetExpenses(env, userId, currentDate);
     const summary = await queryLastThreeDays(env, userId, [addDays(currentDate, -2), addDays(currentDate, -1), currentDate]);
@@ -152,6 +159,8 @@ async function handleText(env: Env, userId: string, replyToken: string, messageT
     return;
   }
 
+  // Once a draft exists, only an explicit edit is allowed to reach Gemini.
+  // This protects an unfinished draft from being replaced by a new expense.
   if (pending && pending.status === "pending_confirmation" && !looksLikeEdit(messageText)) {
     await reply(env, replyToken, [{ type: "text", text: "目前有一筆待確認草稿。請輸入明確的修改指令，或按「確認寫入／取消」；新的支出請稍後再傳。" }]);
     return;
@@ -170,6 +179,8 @@ function looksLikeEdit(value: string): boolean {
 }
 
 async function replyQuery(env: Env, userId: string, replyToken: string, range: ExpenseDateRange): Promise<void> {
+  // D1 returns one row for every requested date, including zero-spend days,
+  // so the Flex message can display a continuous timeline.
   const results = await queryExpenseRange(env, userId, range.startDate, range.endDate);
   if (range.days === 1) {
     const result = results[0] || { date: range.startDate, total: 0, count: 0 };
@@ -194,6 +205,8 @@ async function createDraftFromAi(env: Env, userId: string, replyToken: string, r
     return;
   }
 
+  // Validation is intentionally performed after Gemini. The model extracts
+  // information; this function enforces the application rules before saving it.
   const checked = validateAndNormalizeResult(result, taipeiDate());
   const status = checked.missingInfo.length === 0 ? "pending_confirmation" : "needs_clarification";
   const draft = await createOrUpdateDraft(env, userId, {
