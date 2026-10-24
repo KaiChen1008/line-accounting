@@ -1,9 +1,10 @@
-import { commitDraft, queryLastThreeDays, queryToday } from "./accounting";
+import { commitDraft, queryExpenseRange, queryLastThreeDays } from "./accounting";
 import { createOrUpdateDraft, loadDraftById, loadPendingDraft, markDraftCancelled, markDraftStatus } from "./drafts";
 import { parseWithGemini } from "./gemini";
-import { completedFlex, draftFlex, eventUserId, getMessageContent, lastThreeDaysFlex, reply, todayFlex } from "./line";
+import { completedFlex, draftFlex, eventUserId, getMessageContent, lastThreeDaysFlex, periodExpenseFlex, reply, todayFlex } from "./line";
 import { formatSheetSyncResult, syncRecentSheetExpenses } from "./sheet-sync";
 import { ensureUserSheet } from "./google-sheets";
+import { parseExpenseQuery, type ExpenseDateRange } from "./expense-query";
 import type { AiParseResult, Draft, Env, LineEvent, LineWebhookBody } from "./types";
 import { addDays, constantTimeEqual, hmacSha256Base64, nowIso, taipeiDate } from "./utils";
 import { validateAndNormalizeResult } from "./validation";
@@ -137,13 +138,17 @@ async function handleText(env: Env, userId: string, replyToken: string, messageT
     await reply(env, replyToken, [{ type: "text", text: formatSheetSyncResult(result) }, lastThreeDaysFlex(summary)]);
     return;
   }
-  const query = detectQuery(messageText, currentDate);
+  const query = parseExpenseQuery(messageText, currentDate);
   if (query) {
     if (pending) {
       await reply(env, replyToken, [{ type: "text", text: "目前有一筆待確認草稿。請先完成或取消草稿，再查詢開銷。" }]);
       return;
     }
-    await replyQuery(env, userId, replyToken, query, currentDate);
+    if (query.error) {
+      await reply(env, replyToken, [{ type: "text", text: query.error }]);
+      return;
+    }
+    if (query.range) await replyQuery(env, userId, replyToken, query.range);
     return;
   }
 
@@ -164,24 +169,14 @@ function looksLikeEdit(value: string): boolean {
   return /(第[一二三四五六七八九十\d]+筆|最後一筆|這筆|上一筆|改|修改|換成|設為|分類|品名|金額|日期|昨天|前天)/.test(value);
 }
 
-type Query = "today" | "last3";
-
-function detectQuery(value: string, _currentDate: string): Query | null {
-  if (/(最近三天|近三天|這三天|過去三天).*(花多少|開銷|支出)/.test(value) || /(花多少|開銷|支出).*(最近三天|近三天|這三天|過去三天)/.test(value)) return "last3";
-  if (/(今天|今日).*(花多少|開銷|支出|總額)/.test(value) || /(花多少|總開銷|今日總額)/.test(value)) return "today";
-  return null;
-}
-
-async function replyQuery(env: Env, userId: string, replyToken: string, query: Query, currentDate: string): Promise<void> {
-  if (query === "today") {
-    const result = await queryToday(env, userId, currentDate);
-    await reply(env, replyToken, [todayFlex({ date: currentDate, ...result })]);
+async function replyQuery(env: Env, userId: string, replyToken: string, range: ExpenseDateRange): Promise<void> {
+  const results = await queryExpenseRange(env, userId, range.startDate, range.endDate);
+  if (range.days === 1) {
+    const result = results[0] || { date: range.startDate, total: 0, count: 0 };
+    await reply(env, replyToken, [todayFlex(result)]);
     return;
   }
-  const dates = [addDays(currentDate, -2), addDays(currentDate, -1), currentDate];
-  const results = await queryLastThreeDays(env, userId, dates);
-  const total = results.reduce((sum, row) => sum + row.total, 0);
-  await reply(env, replyToken, [lastThreeDaysFlex(results)]);
+  await reply(env, replyToken, [periodExpenseFlex(results)]);
 }
 
 function formatMoney(value: number): string {
@@ -195,7 +190,7 @@ async function createDraftFromAi(env: Env, userId: string, replyToken: string, r
     return;
   }
   if (result.intent !== "record" && result.intent !== "clarification_response") {
-    await reply(env, replyToken, [{ type: "text", text: "我目前只支援記帳、修改待確認草稿，以及查詢今日／最近三天開銷。" }]);
+    await reply(env, replyToken, [{ type: "text", text: "我目前只支援記帳、修改待確認草稿，以及查詢自訂期限開銷（最多 31 天）。" }]);
     return;
   }
 

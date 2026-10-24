@@ -146,12 +146,13 @@ export function todayFlex(result: TodayExpenseSummary): LineMessage {
   };
 }
 
-export function lastThreeDaysFlex(results: DailyExpenseSummary[]): LineMessage {
+export function periodExpenseFlex(results: DailyExpenseSummary[]): LineMessage {
   const total = results.reduce((sum, row) => sum + row.total, 0);
   const max = Math.max(...results.map((row) => row.total), 1);
+  const dayLabel = `${results.length} 天`;
   return {
     type: "flex",
-    altText: `最近三天開銷：共 NT$ ${amount(total)}`,
+    altText: `期間開銷（${dayLabel}）：共 NT$ ${amount(total)}`,
     contents: {
       type: "bubble",
       body: {
@@ -159,9 +160,9 @@ export function lastThreeDaysFlex(results: DailyExpenseSummary[]): LineMessage {
         layout: "vertical",
         spacing: "md",
         contents: [
-          { type: "text", text: "最近三天開銷", weight: "bold", size: "lg", color: "#166534" },
+          { type: "text", text: "期間開銷", weight: "bold", size: "lg", color: "#166534" },
           { type: "text", text: `${results[0]?.date || ""} ～ ${results.at(-1)?.date || ""}`, size: "xs", color: "#737373" },
-          { type: "text", text: `三天合計 NT$ ${amount(total)}`, size: "xl", weight: "bold", color: "#111827", margin: "sm" },
+          { type: "text", text: `${dayLabel}合計 NT$ ${amount(total)}`, size: "xl", weight: "bold", color: "#111827", margin: "sm" },
           { type: "separator", margin: "md" },
           {
             type: "box",
@@ -211,6 +212,10 @@ export function lastThreeDaysFlex(results: DailyExpenseSummary[]): LineMessage {
       },
     },
   };
+}
+
+export function lastThreeDaysFlex(results: DailyExpenseSummary[]): LineMessage {
+  return periodExpenseFlex(results);
 }
 
 export function eventUserId(event: LineEvent): string | null {

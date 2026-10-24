@@ -14,7 +14,7 @@ A LINE accounting bot built with Cloudflare Workers and TypeScript. Text message
 - Track cross-system write states (`pending`, `written`, `failed`, and `unknown`) so the bot does not blindly retry an ambiguous Sheets request.
 - Resolve the existing Google Sheet tab from its `gid`, then append only columns A–E with `values.append`.
 - Provision a dedicated Google Sheet tab per LINE user. Existing users keep the configured legacy tab; new users receive a `user_xxxxxx` tab on `follow`, or on their first write, query, or sync if no `follow` event was received.
-- Query today's total and the totals for each of the last three calendar days.
+- Query today's total or any custom date range up to 31 calendar days, with a daily breakdown and zero-filled days.
 - Sync the latest three calendar days from Google Sheets back into D1 using sheet row numbers as source keys without deleting existing D1 records.
 
 ## Architecture
@@ -93,6 +93,21 @@ When the user confirms a draft, D1 first creates a unique `draft_id`/`batch_id` 
 - `sheet_response_json`, `sheet_status`, `sheet_updated_range`, batch status, and source keys provide the information needed for reconciliation.
 
 D1 and Google Sheets do not share a transaction. The implementation therefore tracks partial and ambiguous states explicitly instead of claiming cross-system atomicity.
+
+## Expense queries
+
+The bot accepts natural-language date ranges up to 31 calendar days. Examples:
+
+```text
+今天花多少
+昨天花多少
+最近 7 天每天花多少
+最近一個月的開銷
+查詢 10/01 到 10/24 的開銷
+查詢 2026-10-01 至 2026-10-24 的支出
+```
+
+The backend calculates all totals from D1 and returns one row per day, including days with no expenses. The original today and recent-three-day queries remain supported. Requests longer than 31 days are rejected and do not query the database.
 
 ## Security notes
 

@@ -1,7 +1,8 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { appendExpenses, type SheetWriteError } from "./google-sheets";
+import { MAX_QUERY_DAYS } from "./expense-query";
 import type { Draft, Env, ExpenseEntry } from "./types";
-import { makeId, nowIso } from "./utils";
+import { addDays, makeId, nowIso } from "./utils";
 
 interface BatchRow {
   draft_id: string;
@@ -122,15 +123,30 @@ async function readBatchEntries(db: D1Database, batchId: string): Promise<Expens
 }
 
 export async function queryToday(env: Env, userId: string, date: string): Promise<{ total: number; count: number }> {
-  const row = await env.DB.prepare("SELECT COALESCE(SUM(e.amount),0) AS total, COUNT(*) AS count FROM expense_records e JOIN commit_batches b ON b.batch_id=e.batch_id WHERE e.line_user_id=?1 AND e.expense_date=?2 AND e.sheet_status='written' AND b.status='completed'")
-    .bind(userId, date).first<{ total: number; count: number }>();
-  return { total: Number(row?.total || 0), count: Number(row?.count || 0) };
+  const [result] = await queryExpenseRange(env, userId, date, date);
+  return { total: result?.total || 0, count: result?.count || 0 };
 }
 
 export async function queryLastThreeDays(env: Env, userId: string, dates: string[]): Promise<Array<{ date: string; total: number; count: number }>> {
-  const placeholders = dates.map(() => "?").join(",");
-  const rows = await env.DB.prepare(`SELECT expense_date AS date, COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM expense_records e JOIN commit_batches b ON b.batch_id=e.batch_id WHERE e.line_user_id=? AND e.expense_date IN (${placeholders}) AND e.sheet_status='written' AND b.status='completed' GROUP BY expense_date`)
-    .bind(userId, ...dates).all<{ date: string; total: number; count: number }>();
+  if (dates.length === 0) return [];
+  return queryExpenseRange(env, userId, dates[0], dates[dates.length - 1]);
+}
+
+export async function queryExpenseRange(env: Env, userId: string, startDate: string, endDate: string): Promise<Array<{ date: string; total: number; count: number }>> {
+  const days = dateDistance(startDate, endDate) + 1;
+  if (days < 1 || days > MAX_QUERY_DAYS) throw new Error(`查詢期限最多 ${MAX_QUERY_DAYS} 天`);
+
+  const rows = await env.DB.prepare("SELECT expense_date AS date, COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM expense_records e JOIN commit_batches b ON b.batch_id=e.batch_id WHERE e.line_user_id=?1 AND e.expense_date BETWEEN ?2 AND ?3 AND e.sheet_status='written' AND b.status='completed' GROUP BY expense_date")
+    .bind(userId, startDate, endDate).all<{ date: string; total: number; count: number }>();
   const byDate = new Map(rows.results.map((row) => [row.date, { date: row.date, total: Number(row.total), count: Number(row.count) }]));
-  return dates.map((date) => byDate.get(date) || { date, total: 0, count: 0 });
+  const results: Array<{ date: string; total: number; count: number }> = [];
+  for (let offset = 0; offset < days; offset += 1) {
+    const date = addDays(startDate, offset);
+    results.push(byDate.get(date) || { date, total: 0, count: 0 });
+  }
+  return results;
+}
+
+function dateDistance(startDate: string, endDate: string): number {
+  return Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000);
 }
