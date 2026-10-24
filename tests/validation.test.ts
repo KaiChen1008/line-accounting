@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { calculateExpression, validateAndNormalizeResult } from "../src/validation";
+import {
+  calculateExpression,
+  validateAndNormalizeResult,
+} from "../src/validation";
 
 describe("safe amount expressions", () => {
   it("calculates supported arithmetic without eval", () => {
@@ -15,30 +18,52 @@ describe("safe amount expressions", () => {
 
 describe("AI output validation", () => {
   it("uses the supplied Taiwan date and preserves exact categories", () => {
-    const result = validateAndNormalizeResult({
-      intent: "record",
-      status: "ready",
-      entries: [{ amount: 60, amount_expression: null, item: "咖啡", category: "咖啡 ☕️", date: null }],
-      start_date: null,
-      end_date: null,
-      missing_info: [],
-      question: null,
-    }, "2026-10-23");
+    const result = validateAndNormalizeResult(
+      {
+        intent: "record",
+        status: "ready",
+        entries: [
+          {
+            amount: 60,
+            amount_expression: null,
+            item: "咖啡",
+            category: "咖啡 ☕️",
+            date: null,
+          },
+        ],
+        start_date: null,
+        end_date: null,
+        missing_info: [],
+        question: null,
+      },
+      "2026-10-23",
+    );
     expect(result.missingInfo).toEqual([]);
     expect(result.entries[0].date).toBe("2026-10-23");
     expect(result.entries[0].category).toBe("咖啡 ☕️");
   });
 
   it("does not treat an unresolved amount as ready", () => {
-    const result = validateAndNormalizeResult({
-      intent: "record",
-      status: "ready",
-      entries: [{ amount: null, amount_expression: null, item: "午餐", category: "食物 🍽️", date: "2026-10-23" }],
-      start_date: null,
-      end_date: null,
-      missing_info: [],
-      question: null,
-    }, "2026-10-23");
+    const result = validateAndNormalizeResult(
+      {
+        intent: "record",
+        status: "ready",
+        entries: [
+          {
+            amount: null,
+            amount_expression: null,
+            item: "午餐",
+            category: "食物 🍽️",
+            date: "2026-10-23",
+          },
+        ],
+        start_date: null,
+        end_date: null,
+        missing_info: [],
+        question: null,
+      },
+      "2026-10-23",
+    );
     expect(result.missingInfo.length).toBeGreaterThan(0);
     expect(result.entries[0].amount).toBeNull();
   });

@@ -20,7 +20,11 @@ export async function syncRecentSheetExpenses(
   // Import only the latest three calendar days. The source key is stable for
   // a physical sheet row, so rerunning the command updates instead of duplicates.
   const startDate = addDays(endDate, -2);
-  const sheet = await readExpenseRows(env, lineUserId, new Set([startDate, addDays(endDate, -1), endDate]));
+  const sheet = await readExpenseRows(
+    env,
+    lineUserId,
+    new Set([startDate, addDays(endDate, -1), endDate]),
+  );
   let syncedRows = 0;
 
   for (const row of sheet.rows) {
@@ -36,7 +40,11 @@ export async function syncRecentSheetExpenses(
         draftId,
         batchId,
         lineUserId,
-        JSON.stringify({ source: "google_sheet_sync", sheet_title: sheet.title, row_number: row.rowNumber }),
+        JSON.stringify({
+          source: "google_sheet_sync",
+          sheet_title: sheet.title,
+          row_number: row.rowNumber,
+        }),
         now,
       ),
       env.DB.prepare(
@@ -67,6 +75,9 @@ export async function syncRecentSheetExpenses(
 }
 
 export function formatSheetSyncResult(result: SheetSyncResult): string {
-  const invalid = result.invalidRows.length > 0 ? `\n略過 ${result.invalidRows.length} 列格式不正確資料。` : "";
+  const invalid =
+    result.invalidRows.length > 0
+      ? `\n略過 ${result.invalidRows.length} 列格式不正確資料。`
+      : "";
   return `已同步 ${result.startDate}～${result.endDate} 的 Google Sheet 開銷。\n寫入／更新：${result.syncedRows} 筆${invalid}`;
 }

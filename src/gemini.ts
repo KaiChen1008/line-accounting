@@ -10,8 +10,20 @@ const FALLBACK_GEMINI_MODEL = "gemini-3.5-flash-lite";
 const responseSchema = {
   type: "OBJECT",
   properties: {
-    intent: { type: "STRING", enum: ["record", "query_expense_range", "clarification_response", "cancel_pending", "unknown"] },
-    status: { type: "STRING", enum: ["ready", "needs_clarification", "query", "cancelled", "unknown"] },
+    intent: {
+      type: "STRING",
+      enum: [
+        "record",
+        "query_expense_range",
+        "clarification_response",
+        "cancel_pending",
+        "unknown",
+      ],
+    },
+    status: {
+      type: "STRING",
+      enum: ["ready", "needs_clarification", "query", "cancelled", "unknown"],
+    },
     entries: {
       type: "ARRAY",
       items: {
@@ -31,7 +43,15 @@ const responseSchema = {
     missing_info: { type: "ARRAY", items: { type: "STRING" } },
     question: { type: "STRING", nullable: true },
   },
-  required: ["intent", "status", "entries", "start_date", "end_date", "missing_info", "question"],
+  required: [
+    "intent",
+    "status",
+    "entries",
+    "start_date",
+    "end_date",
+    "missing_info",
+    "question",
+  ],
 } as Record<string, unknown>;
 
 function systemPrompt(currentDate: string, pendingDraft: unknown): string {
@@ -56,15 +76,25 @@ export async function parseWithGemini(
 ): Promise<AiParseResult> {
   // Text and receipt images share the same prompt and structured output path.
   const parts: Array<Record<string, unknown>> = [
-    { text: `${systemPrompt(currentDate, pendingDraft)}\n使用者輸入：${input.text || "（收據照片，請辨識）"}` },
+    {
+      text: `${systemPrompt(currentDate, pendingDraft)}\n使用者輸入：${input.text || "（收據照片，請辨識）"}`,
+    },
   ];
   if (input.imageBytes && input.imageMimeType) {
     let binary = "";
-    for (const byte of new Uint8Array(input.imageBytes)) binary += String.fromCharCode(byte);
-    parts.push({ inlineData: { mimeType: input.imageMimeType, data: btoa(binary) } });
+    for (const byte of new Uint8Array(input.imageBytes))
+      binary += String.fromCharCode(byte);
+    parts.push({
+      inlineData: { mimeType: input.imageMimeType, data: btoa(binary) },
+    });
   }
 
-  const models = [...new Set([env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL, FALLBACK_GEMINI_MODEL])];
+  const models = [
+    ...new Set([
+      env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+      FALLBACK_GEMINI_MODEL,
+    ]),
+  ];
   let lastError: unknown = null;
   for (const model of models) {
     try {
@@ -72,25 +102,51 @@ export async function parseWithGemini(
     } catch (error) {
       // Try the fallback model for transient model-specific failures.
       lastError = error;
-      console.warn(`Gemini model failed: ${model}`, error instanceof Error ? error.message : "unknown error");
+      console.warn(
+        `Gemini model failed: ${model}`,
+        error instanceof Error ? error.message : "unknown error",
+      );
     }
   }
   throw lastError instanceof Error ? lastError : new Error("Gemini API failed");
 }
 
-async function requestGeminiModel(env: Env, model: string, parts: Array<Record<string, unknown>>): Promise<AiParseResult> {
-  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts }],
-      generationConfig: { responseMimeType: "application/json", responseSchema },
-    }),
-  }, EXTERNAL_API_TIMEOUT_MS, "Gemini API timeout");
+async function requestGeminiModel(
+  env: Env,
+  model: string,
+  parts: Array<Record<string, unknown>>,
+): Promise<AiParseResult> {
+  const response = await fetchWithTimeout(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema,
+        },
+      }),
+    },
+    EXTERNAL_API_TIMEOUT_MS,
+    "Gemini API timeout",
+  );
   if (!response.ok) throw new Error(`Gemini API error ${response.status}`);
-  const payload = await withTimeout(response.json() as Promise<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>, EXTERNAL_API_TIMEOUT_MS, "Gemini API response timeout");
-  const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+  const payload = await withTimeout(
+    response.json() as Promise<{
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    }>,
+    EXTERNAL_API_TIMEOUT_MS,
+    "Gemini API response timeout",
+  );
+  const text =
+    payload.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("") || "";
   const parsed = JSON.parse(text) as AiParseResult;
-  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.entries)) throw new Error("Gemini 回傳格式無效");
+  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.entries)) {
+    throw new Error("Gemini 回傳格式無效");
+  }
   return parsed;
 }

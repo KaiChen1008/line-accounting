@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { MAX_QUERY_DAYS, normalizeExpenseDateRange } from "../src/expense-query";
+import {
+  MAX_QUERY_DAYS,
+  normalizeExpenseDateRange,
+} from "../src/expense-query";
 
 describe("AI expense query ranges", () => {
   it("accepts the normalized range returned by AI", () => {
@@ -9,8 +12,12 @@ describe("AI expense query ranges", () => {
   });
 
   it("rejects missing or malformed AI dates", () => {
-    expect(normalizeExpenseDateRange(null, "2026-10-24")).toEqual({ error: "AI 回傳的查詢日期格式無效。" });
-    expect(normalizeExpenseDateRange("2026/10/18", "2026-10-24")).toEqual({ error: "AI 回傳的查詢日期格式無效。" });
+    expect(normalizeExpenseDateRange(null, "2026-10-24")).toEqual({
+      error: "AI 回傳的查詢日期格式無效。",
+    });
+    expect(normalizeExpenseDateRange("2026/10/18", "2026-10-24")).toEqual({
+      error: "AI 回傳的查詢日期格式無效。",
+    });
   });
 
   it("rejects ranges longer than one month", () => {

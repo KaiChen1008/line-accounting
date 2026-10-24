@@ -25,7 +25,12 @@ export type Intent =
   | "clarification_response"
   | "cancel_pending"
   | "unknown";
-export type ParseStatus = "ready" | "needs_clarification" | "query" | "cancelled" | "unknown";
+export type ParseStatus =
+  | "ready"
+  | "needs_clarification"
+  | "query"
+  | "cancelled"
+  | "unknown";
 export type DraftStatus =
   | "needs_clarification"
   | "pending_confirmation"
@@ -86,9 +91,18 @@ export interface LineEvent {
   replyToken?: string;
   mode?: string;
   timestamp?: number;
-  source?: { type?: string; userId?: string;[key: string]: unknown };
-  message?: { id?: string; type?: string; text?: string;[key: string]: unknown };
-  postback?: { data?: string; params?: Record<string, string>;[key: string]: unknown };
+  source?: { type?: string; userId?: string; [key: string]: unknown };
+  message?: {
+    id?: string;
+    type?: string;
+    text?: string;
+    [key: string]: unknown;
+  };
+  postback?: {
+    data?: string;
+    params?: Record<string, string>;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
