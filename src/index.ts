@@ -1,8 +1,4 @@
-import {
-  commitDraft,
-  queryExpenseRange,
-  queryLastThreeDays,
-} from "./accounting";
+import { commitDraft, queryExpenseRange } from "./accounting";
 import {
   createOrUpdateDraft,
   loadDraftById,
@@ -16,12 +12,10 @@ import {
   draftFlex,
   eventUserId,
   getMessageContent,
-  lastThreeDaysFlex,
   periodExpenseFlex,
   reply,
   todayFlex,
 } from "./line";
-import { formatSheetSyncResult, syncRecentSheetExpenses } from "./sheet-sync";
 import { ensureUserSheet } from "./google-sheets";
 import {
   normalizeExpenseDateRange,
@@ -35,7 +29,6 @@ import type {
   LineWebhookBody,
 } from "./types";
 import {
-  addDays,
   constantTimeEqual,
   hmacSha256Base64,
   nowIso,
@@ -82,48 +75,74 @@ export default {
 
 async function processEvent(event: LineEvent, env: Env): Promise<void> {
   const eventId = event.webhookEventId;
-  let stage = "claim_event";
+  if (!eventId) {
+    await reportEventFailure(
+      event,
+      env,
+      eventId,
+      new Error("Missing webhook event ID"),
+    );
+    return;
+  }
+
   try {
     // Claim the event before handling it. LINE may retry the same webhook, so
     // this prevents duplicate replies and duplicate writes.
-    if (eventId && !(await claimWebhookEvent(env, eventId))) return;
-    stage = "handle_event";
-    await handleEvent(event, env);
-    stage = "mark_completed";
-    if (eventId) await updateWebhookEvent(env, eventId, "completed");
+    if (!(await claimWebhookEvent(env, eventId))) return;
   } catch (error) {
-    const detail = publicErrorMessage(error);
-    console.error("webhook_event_failed", {
-      eventId: eventId || null,
-      stage,
-      error: detail,
-    });
-    if (eventId) {
-      try {
-        await updateWebhookEvent(env, eventId, "failed", `${stage}: ${detail}`);
-      } catch (updateError) {
-        console.error("webhook_event_status_update_failed", {
-          eventId,
-          error: publicErrorMessage(updateError),
-        });
-      }
+    await reportEventFailure(event, env, eventId, error);
+    return;
+  }
+
+  try {
+    await handleEvent(event, env);
+  } catch (error) {
+    await reportEventFailure(event, env, eventId, error);
+    return;
+  }
+
+  try {
+    await updateWebhookEvent(env, eventId, "completed");
+  } catch (error) {
+    await reportEventFailure(event, env, eventId, error);
+  }
+}
+
+async function reportEventFailure(
+  event: LineEvent,
+  env: Env,
+  eventId: string | undefined,
+  error: unknown,
+): Promise<void> {
+  const detail = publicErrorMessage(error);
+  console.error("webhook_event_failed", {
+    eventId,
+    error: detail,
+  });
+
+  if (eventId) {
+    try {
+      await updateWebhookEvent(env, eventId, "failed", detail);
+    } catch (updateError) {
+      console.error("webhook_event_status_update_failed", {
+        eventId,
+        error: publicErrorMessage(updateError),
+      });
     }
-    const token = event.replyToken;
-    if (token) {
-      try {
-        await reply(env, token, [
-          {
-            type: "text",
-            text: `系統處理失敗。\n階段：${stage}\n錯誤：${detail}\n尚未完成正式記帳，請稍後重試。`,
-          },
-        ]);
-      } catch {
-        console.error("webhook_error_reply_failed", {
-          eventId: eventId || null,
-          stage,
-        });
-      }
-    }
+  }
+
+  const token = event.replyToken;
+  if (!token) return;
+
+  try {
+    await reply(env, token, [
+      {
+        type: "text",
+        text: `系統處理失敗。\n錯誤：${detail}\n尚未完成正式記帳，請稍後重試。`,
+      },
+    ]);
+  } catch {
+    console.error("webhook_error_reply_failed", { eventId });
   }
 }
 
@@ -242,20 +261,6 @@ async function handleText(
   }
 
   const currentDate = taipeiDate();
-  // The explicit sync command is handled before AI classification.
-  if (/^同步(最近)?三天(?:開銷|支出)?$/.test(messageText)) {
-    const result = await syncRecentSheetExpenses(env, userId, currentDate);
-    const summary = await queryLastThreeDays(env, userId, [
-      addDays(currentDate, -2),
-      addDays(currentDate, -1),
-      currentDate,
-    ]);
-    await reply(env, replyToken, [
-      { type: "text", text: formatSheetSyncResult(result) },
-      lastThreeDaysFlex(summary),
-    ]);
-    return;
-  }
   // Once a draft exists, only an explicit edit is allowed to reach Gemini.
   // This protects an unfinished draft from being replaced by a new expense.
   if (

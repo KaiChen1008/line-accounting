@@ -13,9 +13,8 @@ A LINE accounting bot built with Cloudflare Workers and TypeScript. Text message
 - Store formal records in both Cloudflare D1 and Google Sheets.
 - Track cross-system write states (`pending`, `written`, `failed`, and `unknown`) so the bot does not blindly retry an ambiguous Sheets request.
 - Resolve the existing Google Sheet tab from its `gid`, then append only columns A–E with `values.append`.
-- Provision a dedicated Google Sheet tab per LINE user. Existing users keep the configured legacy tab; new users receive a `user_xxxxxx` tab on `follow`, or on their first write, query, or sync if no `follow` event was received.
+- Provision a dedicated Google Sheet tab per LINE user. Existing users keep the configured legacy tab; new users receive a `user_xxxxxx` tab on `follow`, or on their first write or query if no `follow` event was received.
 - Query today's total or any custom date range up to 31 calendar days, with a daily breakdown and zero-filled days.
-- Sync the latest three calendar days from Google Sheets back into D1 using sheet row numbers as source keys without deleting existing D1 records.
 
 ## Architecture
 
@@ -24,7 +23,7 @@ A LINE accounting bot built with Cloudflare Workers and TypeScript. Text message
 | Cloudflare Workers | Webhook handling and orchestration |
 | Gemini API | Structured extraction and draft-edit interpretation |
 | Cloudflare KV | Pending drafts only; not a source of formal accounting records |
-| Cloudflare D1 | Webhook deduplication, batches, formal records, sync state, and query source |
+| Cloudflare D1 | Webhook deduplication, batches, formal records, write state, and query source |
 | Google Sheets API | Human-readable A–E append-only ledger and reconciliation source |
 | LINE Messaging API | Text/image input, Flex previews, and confirmation postbacks |
 

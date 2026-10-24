@@ -407,10 +407,6 @@ export function periodExpenseFlex(results: DailyExpenseSummary[]): LineMessage {
   };
 }
 
-export function lastThreeDaysFlex(results: DailyExpenseSummary[]): LineMessage {
-  return periodExpenseFlex(results);
-}
-
 export function eventUserId(event: LineEvent): string | null {
   return typeof event.source?.userId === "string" ? event.source.userId : null;
 }

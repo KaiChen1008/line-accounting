@@ -1,10 +1,4 @@
-import {
-  isCategory,
-  type Category,
-  type Env,
-  type ExpenseEntry,
-  type SheetAppendResult,
-} from "./types";
+import { type Env, type ExpenseEntry, type SheetAppendResult } from "./types";
 import { EXTERNAL_API_TIMEOUT_MS } from "./constants";
 import {
   base64UrlEncode,
@@ -204,58 +198,6 @@ export async function appendExpenses(
   );
 }
 
-export interface SheetExpenseRow {
-  rowNumber: number;
-  date: string;
-  amount: number;
-  item: string;
-  category: Category;
-}
-
-export interface SheetReadResult {
-  sheetId: number;
-  title: string;
-  rows: SheetExpenseRow[];
-  invalidRows: Array<{ rowNumber: number; reason: string }>;
-}
-
-export async function readExpenseRows(
-  env: Env,
-  lineUserId: string,
-  dates: Set<string>,
-): Promise<SheetReadResult> {
-  // Read the tab once, then filter and validate rows locally. This avoids one
-  // API request per date and lets the sync report malformed rows precisely.
-  const sheet = await ensureUserSheet(env, lineUserId);
-  const title = sheet.title;
-  const range = `${title}!A:E`;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(env.GOOGLE_SHEET_ID)}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE`;
-  const response = await sheetsRequest(env, url);
-  if (!response.ok)
-    throw new Error(
-      `Google Sheets read error ${response.status}: ${await response.text()}`,
-    );
-  const payload = await withTimeout(
-    response.json() as Promise<{ values?: unknown[][] }>,
-    EXTERNAL_API_TIMEOUT_MS,
-    "Google Sheets read response timeout",
-  );
-  const rows: SheetExpenseRow[] = [];
-  const invalidRows: Array<{ rowNumber: number; reason: string }> = [];
-
-  for (const [index, values] of (payload.values || []).entries()) {
-    const rowNumber = index + 1;
-    const parsed = parseSheetExpenseRow(rowNumber, values, dates);
-    if (parsed.kind === "header" || parsed.kind === "outside_range") continue;
-    if (parsed.kind === "invalid") {
-      invalidRows.push({ rowNumber, reason: parsed.reason });
-      continue;
-    }
-    if (parsed.kind === "valid") rows.push(parsed.row);
-  }
-  return { sheetId: sheet.sheetId, title, rows, invalidRows };
-}
-
 export async function ensureUserSheet(
   env: Env,
   lineUserId: string,
@@ -402,55 +344,6 @@ async function shortUserHash(lineUserId: string): Promise<string> {
 
 async function delay(milliseconds: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-type ParsedSheetExpenseRow =
-  | { kind: "header" | "outside_range" }
-  | { kind: "invalid"; reason: string }
-  | { kind: "valid"; row: SheetExpenseRow };
-
-export function parseSheetExpenseRow(
-  rowNumber: number,
-  values: unknown[],
-  dates: Set<string>,
-): ParsedSheetExpenseRow {
-  // Treat headers and dates outside the requested range as normal input, not
-  // errors, while reporting rows that look like expenses but are malformed.
-  const rawDate = String(values[0] ?? "").trim();
-  const rawAmount = String(values[1] ?? "").trim();
-  const item = String(values[2] ?? "").trim();
-  const rawCategory = String(values[3] ?? "").trim();
-
-  if (!rawDate && !rawAmount && !item && !rawCategory)
-    return { kind: "outside_range" };
-  if (/^(日期|date)$/i.test(rawDate) && /^(金額|amount)$/i.test(rawAmount))
-    return { kind: "header" };
-
-  const date = normalizeSheetDate(rawDate);
-  if (!date) return { kind: "invalid", reason: "日期格式錯誤" };
-  if (!dates.has(date)) return { kind: "outside_range" };
-  const amount = Number(rawAmount.replace(/[^0-9.-]/g, ""));
-  if (!Number.isFinite(amount) || amount <= 0)
-    return { kind: "invalid", reason: "金額格式錯誤" };
-  if (!item) return { kind: "invalid", reason: "缺少品項" };
-  if (!isCategory(rawCategory))
-    return {
-      kind: "invalid",
-      reason: `分類不在支援清單：${rawCategory || "空白"}`,
-    };
-  return {
-    kind: "valid",
-    row: { rowNumber, date, amount, item, category: rawCategory },
-  };
-}
-
-function normalizeSheetDate(value: string): string | null {
-  const match = value.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
-  if (!match) return null;
-  const [, year, month, day] = match;
-  const normalized = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-  const date = new Date(`${normalized}T00:00:00Z`);
-  return date.toISOString().slice(0, 10) === normalized ? normalized : null;
 }
 
 export function sheetRows(

@@ -267,15 +267,6 @@ export async function queryToday(
   return { total: result?.total || 0, count: result?.count || 0 };
 }
 
-export async function queryLastThreeDays(
-  env: Env,
-  userId: string,
-  dates: string[],
-): Promise<Array<{ date: string; total: number; count: number }>> {
-  if (dates.length === 0) return [];
-  return queryExpenseRange(env, userId, dates[0], dates[dates.length - 1]);
-}
-
 export async function queryExpenseRange(
   env: Env,
   userId: string,

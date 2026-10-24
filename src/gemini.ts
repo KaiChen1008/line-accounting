@@ -3,7 +3,6 @@ import { EXTERNAL_API_TIMEOUT_MS } from "./constants";
 import { fetchWithTimeout, withTimeout } from "./utils";
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
-const FALLBACK_GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 // Gemini must return a predictable structure; application validation still
 // treats the model response as untrusted input.
@@ -89,29 +88,11 @@ export async function parseWithGemini(
     });
   }
 
-  const models = [
-    ...new Set([
-      env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
-      FALLBACK_GEMINI_MODEL,
-    ]),
-  ];
-  let lastError: unknown = null;
-  for (const model of models) {
-    try {
-      return await requestGeminiModel(env, model, parts);
-    } catch (error) {
-      // Try the fallback model for transient model-specific failures.
-      lastError = error;
-      console.warn(
-        `Gemini model failed: ${model}`,
-        error instanceof Error ? error.message : "unknown error",
-      );
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("Gemini API failed");
+  const model = env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+  return requestGemini(env, model, parts);
 }
 
-async function requestGeminiModel(
+async function requestGemini(
   env: Env,
   model: string,
   parts: Array<Record<string, unknown>>,
