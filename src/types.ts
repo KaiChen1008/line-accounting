@@ -19,8 +19,7 @@ export function isCategory(value: string): value is Category {
 }
 export type Intent =
   | "record"
-  | "query_today_total"
-  | "query_last_3_days"
+  | "query_expense_range"
   | "clarification_response"
   | "cancel_pending"
   | "unknown";

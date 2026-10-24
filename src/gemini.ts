@@ -7,7 +7,7 @@ const FALLBACK_GEMINI_MODEL = "gemini-3.5-flash-lite";
 const responseSchema = {
   type: "OBJECT",
   properties: {
-    intent: { type: "STRING", enum: ["record", "query_today_total", "query_last_3_days", "clarification_response", "cancel_pending", "unknown"] },
+    intent: { type: "STRING", enum: ["record", "query_expense_range", "clarification_response", "cancel_pending", "unknown"] },
     status: { type: "STRING", enum: ["ready", "needs_clarification", "query", "cancelled", "unknown"] },
     entries: {
       type: "ARRAY",
@@ -33,6 +33,7 @@ function systemPrompt(currentDate: string, pendingDraft: unknown): string {
   return `你是台灣使用者的記帳資料解析器。只回傳符合 JSON Schema 的 JSON，不要 Markdown，不要解釋。
 CURRENT_DATE_TAIPEI=${currentDate}
 所有未指定日期的支出使用 CURRENT_DATE_TAIPEI；昨天、前天依此日期計算，日期輸出 YYYY-MM-DD。年份不明確或日期衝突時，status=needs_clarification。
+所有查詢意圖一律使用 intent=query_expense_range，不要使用固定的今天或三天 intent；查詢的實際起訖日期由後端從使用者原始訊息解析並限制為最多 31 天，AI 不負責加總。
 只允許以下分類完整字串：食物 🍽️、飲品 🧃、咖啡 ☕、交通 🚌、消費 👜、娛樂 🎳、居家 🏡、3C 📱、醫藥 🏥、房租 🏠、其他 🏷️。
 咖啡原則上分類為咖啡 ☕；任何「請 貝 ...」項目一律分類為消費 👜，且保留原始品名；全聯的水+紅茶+牛奶、綠茶+水等飲用組合分類居家 🏡；游泳、教練課分類娛樂 🎳。
 品名保留使用者原始輸入，不要改寫。支援多行、多筆支出。amount_expression 只保存使用者明確寫出的算式，例如 306+240、1430/2；後端會計算，無法辨識或不確定的金額必須是 null 並詢問，不能猜。
