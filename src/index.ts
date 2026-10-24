@@ -2,7 +2,7 @@ import { commitDraft, queryExpenseRange } from "./accounting";
 import { createOrUpdateDraft, loadDraftById, loadPendingDraft, markDraftCancelled, markDraftStatus } from "./drafts";
 import { parseWithGemini } from "./gemini";
 import { completedFlex, draftFlex, eventUserId, getMessageContent, periodExpenseFlex, reply, todayFlex } from "./line";
-import { formatSheetSyncResult, syncRecentSheetExpenses } from "./sheet-sync";
+import { formatSheetSyncResult, parseSyncDays, syncRecentSheetExpenses } from "./sheet-sync";
 import { ensureUserSheet } from "./google-sheets";
 import { parseExpenseQuery, type ExpenseDateRange } from "./expense-query";
 import type { AiParseResult, Draft, Env, LineEvent, LineWebhookBody } from "./types";
@@ -132,9 +132,9 @@ async function handleText(env: Env, userId: string, replyToken: string, messageT
   }
 
   const currentDate = taipeiDate();
-  const syncMatch = messageText.match(/^同步(?:最近)?(三|五|3|5)天(?:開銷|支出)?$/);
-  if (syncMatch) {
-    const days = syncMatch[1] === "三" || syncMatch[1] === "3" ? 3 : 5;
+  const syncDays = parseSyncDays(messageText);
+  if (syncDays) {
+    const days = syncDays;
     const result = await syncRecentSheetExpenses(env, userId, currentDate, days);
     const summary = await queryExpenseRange(env, userId, result.startDate, result.endDate);
     await reply(env, replyToken, [{ type: "text", text: formatSheetSyncResult(result) }, periodExpenseFlex(summary)]);

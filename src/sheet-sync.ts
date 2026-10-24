@@ -12,6 +12,14 @@ export interface SheetSyncResult {
   invalidRows: Array<{ rowNumber: number; reason: string }>;
 }
 
+export function parseSyncDays(input: string): 3 | 5 | null {
+  const normalized = input.replace(/[\u3000\s]/g, "");
+  if (!/^同步(?:最近|過去)?(?:三|五|3|5)天/.test(normalized)) return null;
+  const match = normalized.match(/^同步(?:最近|過去)?(三|五|3|5)天/);
+  if (!match) return null;
+  return match[1] === "三" || match[1] === "3" ? 3 : 5;
+}
+
 export async function syncRecentSheetExpenses(
   env: Env,
   lineUserId: string,
