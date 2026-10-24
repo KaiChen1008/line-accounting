@@ -1,12 +1,12 @@
-import { commitDraft, queryExpenseRange } from "./accounting";
+import { commitDraft, queryExpenseRange, queryLastThreeDays } from "./accounting";
 import { createOrUpdateDraft, loadDraftById, loadPendingDraft, markDraftCancelled, markDraftStatus } from "./drafts";
 import { parseWithGemini } from "./gemini";
-import { completedFlex, draftFlex, eventUserId, getMessageContent, periodExpenseFlex, reply, todayFlex } from "./line";
-import { formatSheetSyncResult, parseSyncDays, syncRecentSheetExpenses } from "./sheet-sync";
+import { completedFlex, draftFlex, eventUserId, getMessageContent, lastThreeDaysFlex, periodExpenseFlex, reply, todayFlex } from "./line";
+import { formatSheetSyncResult, syncRecentSheetExpenses } from "./sheet-sync";
 import { ensureUserSheet } from "./google-sheets";
 import { parseExpenseQuery, type ExpenseDateRange } from "./expense-query";
 import type { AiParseResult, Draft, Env, LineEvent, LineWebhookBody } from "./types";
-import { constantTimeEqual, hmacSha256Base64, nowIso, taipeiDate } from "./utils";
+import { addDays, constantTimeEqual, hmacSha256Base64, nowIso, taipeiDate } from "./utils";
 import { validateAndNormalizeResult } from "./validation";
 
 export default {
@@ -132,12 +132,10 @@ async function handleText(env: Env, userId: string, replyToken: string, messageT
   }
 
   const currentDate = taipeiDate();
-  const syncDays = parseSyncDays(messageText);
-  if (syncDays) {
-    const days = syncDays;
-    const result = await syncRecentSheetExpenses(env, userId, currentDate, days);
-    const summary = await queryExpenseRange(env, userId, result.startDate, result.endDate);
-    await reply(env, replyToken, [{ type: "text", text: formatSheetSyncResult(result) }, periodExpenseFlex(summary)]);
+  if (/^同步(最近)?三天(?:開銷|支出)?$/.test(messageText)) {
+    const result = await syncRecentSheetExpenses(env, userId, currentDate);
+    const summary = await queryLastThreeDays(env, userId, [addDays(currentDate, -2), addDays(currentDate, -1), currentDate]);
+    await reply(env, replyToken, [{ type: "text", text: formatSheetSyncResult(result) }, lastThreeDaysFlex(summary)]);
     return;
   }
   const query = parseExpenseQuery(messageText, currentDate);
