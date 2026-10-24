@@ -1,0 +1,37 @@
+name = "line-accounting-bot"
+main = "src/index.ts"
+compatibility_date = "2026-10-23"
+
+[[routes]]
+pattern = "line.kaichenl.com"
+custom_domain = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "line-accounting"
+database_id = "e38188f9-9dee-42a5-968f-b86e2fec88d3"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "DRAFTS"
+id = "386069193dca43d48e411c63d2910596"
+
+[vars]
+GOOGLE_SHEET_ID = "1MQAz90rmtHbrL0bZPL6RP14m7-oTanlID2PWAaM3WGg"
+GOOGLE_SHEET_GID = "2099277495"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+DRAFT_TTL_SECONDS = "86400"
+
+[secrets]
+required = [
+  "LINE_CHANNEL_SECRET",
+  "LINE_CHANNEL_ACCESS_TOKEN",
+  "GEMINI_API_KEY",
+  "GOOGLE_SERVICE_ACCOUNT_JSON",
+]
+
+# Secrets (do not commit values):
+# wrangler secret put LINE_CHANNEL_SECRET
+# wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
+# wrangler secret put GEMINI_API_KEY
+# wrangler secret put GOOGLE_SERVICE_ACCOUNT_JSON
