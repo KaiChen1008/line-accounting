@@ -4,7 +4,7 @@ import { parseWithGemini } from "./gemini";
 import { completedFlex, draftFlex, eventUserId, getMessageContent, lastThreeDaysFlex, periodExpenseFlex, reply, todayFlex } from "./line";
 import { formatSheetSyncResult, syncRecentSheetExpenses } from "./sheet-sync";
 import { ensureUserSheet } from "./google-sheets";
-import { parseExpenseQuery, type ExpenseDateRange } from "./expense-query";
+import { normalizeExpenseDateRange, type ExpenseDateRange } from "./expense-query";
 import type { AiParseResult, Draft, Env, LineEvent, LineWebhookBody } from "./types";
 import { addDays, constantTimeEqual, hmacSha256Base64, nowIso, taipeiDate } from "./utils";
 import { validateAndNormalizeResult } from "./validation";
@@ -138,27 +138,13 @@ async function handleText(env: Env, userId: string, replyToken: string, messageT
   }
 
   const currentDate = taipeiDate();
-  // The explicit sync command is handled before the general query parser.
+  // The explicit sync command is handled before AI classification.
   if (/^同步(最近)?三天(?:開銷|支出)?$/.test(messageText)) {
     const result = await syncRecentSheetExpenses(env, userId, currentDate);
     const summary = await queryLastThreeDays(env, userId, [addDays(currentDate, -2), addDays(currentDate, -1), currentDate]);
     await reply(env, replyToken, [{ type: "text", text: formatSheetSyncResult(result) }, lastThreeDaysFlex(summary)]);
     return;
   }
-  const query = parseExpenseQuery(messageText, currentDate);
-  if (query) {
-    if (pending) {
-      await reply(env, replyToken, [{ type: "text", text: "目前有一筆待確認草稿。請先完成或取消草稿，再查詢開銷。" }]);
-      return;
-    }
-    if (query.error) {
-      await reply(env, replyToken, [{ type: "text", text: query.error }]);
-      return;
-    }
-    if (query.range) await replyQuery(env, userId, replyToken, query.range);
-    return;
-  }
-
   // Once a draft exists, only an explicit edit is allowed to reach Gemini.
   // This protects an unfinished draft from being replaced by a new expense.
   if (pending && pending.status === "pending_confirmation" && !looksLikeEdit(messageText)) {
@@ -167,6 +153,21 @@ async function handleText(env: Env, userId: string, replyToken: string, messageT
   }
 
   const parsed = await parseWithGemini(env, { text: messageText }, currentDate, pending);
+  if (parsed.intent === "query_expense_range") {
+    if (pending) {
+      await reply(env, replyToken, [{ type: "text", text: "目前有一筆待確認草稿。請先完成或取消草稿，再查詢開銷。" }]);
+      return;
+    }
+    // The AI has already interpreted the user's natural-language date range;
+    // the backend only validates the normalized result before querying D1.
+    const query = normalizeExpenseDateRange(parsed.start_date, parsed.end_date);
+    if (query.error) {
+      await reply(env, replyToken, [{ type: "text", text: parsed.question || query.error }]);
+      return;
+    }
+    if (query.range) await replyQuery(env, userId, replyToken, query.range);
+    return;
+  }
   if (pending && parsed.intent === "record" && !looksLikeEdit(messageText) && pending.status !== "needs_clarification") {
     await reply(env, replyToken, [{ type: "text", text: "這看起來是新的支出，但目前仍有待確認草稿。請先完成或取消目前草稿。" }]);
     return;
@@ -259,7 +260,7 @@ async function handlePostback(event: LineEvent, env: Env, userId: string): Promi
     await reply(env, token, [{ type: "text", text: "這筆草稿尚未具備完整資料，請先補充缺少內容；尚未正式記帳。" }]);
     return;
   }
-  const checked = validateAndNormalizeResult({ intent: "record", status: "ready", entries: draft.entries, missing_info: [], question: null });
+  const checked = validateAndNormalizeResult({ intent: "record", status: "ready", entries: draft.entries, start_date: null, end_date: null, missing_info: [], question: null });
   if (checked.missingInfo.length > 0 || checked.entries.some((entry) => entry.amount === null || !entry.category || !entry.date || !entry.item)) {
     await reply(env, token, [{ type: "text", text: "草稿資料驗證未通過，尚未正式記帳，請重新修改或建立草稿。" }]);
     return;

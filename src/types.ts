@@ -46,6 +46,10 @@ export interface AiParseResult {
   intent: Intent;
   status: ParseStatus;
   entries: ExpenseEntry[];
+  // Gemini fills these fields for query_expense_range and returns null for
+  // recording or draft-edit intents.
+  start_date: string | null;
+  end_date: string | null;
   missing_info: string[];
   question: string | null;
 }

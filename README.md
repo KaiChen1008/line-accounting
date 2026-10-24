@@ -5,7 +5,7 @@ A LINE accounting bot built with Cloudflare Workers and TypeScript. Text message
 ## Features
 
 - Parse one or multiple expenses from multiline text or receipt photos.
-- Use Gemini structured JSON output for amount, item, category, and date extraction.
+- Use Gemini structured JSON output for amount, item, category, expense dates, and query date ranges.
 - Safely evaluate explicit amount expressions such as `306+240`, `1430/2`, and `200-75` without using `eval`.
 - Use Taiwan local dates and preserve the exact category names and emojis required by the spreadsheet format.
 - Keep one 24-hour pending draft per LINE user, with natural-language edits, re-validation, recalculated totals, preview, and cancellation.
@@ -96,7 +96,7 @@ D1 and Google Sheets do not share a transaction. The implementation therefore tr
 
 ## Expense queries
 
-The bot accepts natural-language date ranges up to 31 calendar days. Examples:
+The bot sends natural-language date queries to Gemini. Gemini resolves the requested period into `start_date` and `end_date` in `YYYY-MM-DD` format, using the current Taiwan date for relative phrases. The backend validates that AI result and allows up to 31 calendar days; it does not parse the original query text again. Examples:
 
 ```text
 今天花多少
@@ -107,7 +107,7 @@ The bot accepts natural-language date ranges up to 31 calendar days. Examples:
 查詢 2026-10-01 至 2026-10-24 的支出
 ```
 
-The backend calculates all totals from D1 and returns one row per day, including days with no expenses. The original today and recent-three-day queries remain supported. Requests longer than 31 days are rejected and do not query the database.
+The backend calculates all totals from D1 and returns one row per day, including days with no expenses. Requests longer than 31 days or invalid AI date ranges are rejected and do not query the database.
 
 
 ## Security notes

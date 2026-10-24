@@ -19,6 +19,8 @@ describe("AI output validation", () => {
       intent: "record",
       status: "ready",
       entries: [{ amount: 60, amount_expression: null, item: "咖啡", category: "咖啡 ☕", date: null }],
+      start_date: null,
+      end_date: null,
       missing_info: [],
       question: null,
     }, "2026-10-23");
@@ -32,6 +34,8 @@ describe("AI output validation", () => {
       intent: "record",
       status: "ready",
       entries: [{ amount: null, amount_expression: null, item: "午餐", category: "食物 🍽️", date: "2026-10-23" }],
+      start_date: null,
+      end_date: null,
       missing_info: [],
       question: null,
     }, "2026-10-23");
