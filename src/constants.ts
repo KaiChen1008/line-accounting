@@ -5,3 +5,4 @@ export const MAX_ENTRIES_PER_DRAFT = 50;
 export const MAX_ITEM_LENGTH = 200;
 export const MAX_AMOUNT = 1_000_000_000;
 export const EXTERNAL_API_TIMEOUT_MS = 15_000;
+export const GEMINI_API_TIMEOUT_MS = 60_000;

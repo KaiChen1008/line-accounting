@@ -1,5 +1,5 @@
 import type { AiParseResult, Env } from "./types";
-import { EXTERNAL_API_TIMEOUT_MS } from "./constants";
+import { GEMINI_API_TIMEOUT_MS } from "./constants";
 import { fetchWithTimeout, withTimeout } from "./utils";
 
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -110,7 +110,7 @@ async function requestGemini(
         },
       }),
     },
-    EXTERNAL_API_TIMEOUT_MS,
+    GEMINI_API_TIMEOUT_MS,
     "Gemini API timeout",
   );
   if (!response.ok) throw new Error(`Gemini API error ${response.status}`);
@@ -118,7 +118,7 @@ async function requestGemini(
     response.json() as Promise<{
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     }>,
-    EXTERNAL_API_TIMEOUT_MS,
+    GEMINI_API_TIMEOUT_MS,
     "Gemini API response timeout",
   );
   const text =

@@ -52,10 +52,14 @@ export default {
       return new Response("Not found", { status: 404 });
     }
 
+    const signature = request.headers.get("x-line-signature");
+    if (!signature) {
+      return new Response("Invalid signature", { status: 401 });
+    }
+
     const bodyText = await request.text();
-    const signature = request.headers.get("x-line-signature") || "";
     const expected = await hmacSha256Base64(env.LINE_CHANNEL_SECRET, bodyText);
-    if (!signature || !constantTimeEqual(expected, signature)) {
+    if (!constantTimeEqual(expected, signature)) {
       return new Response("Invalid signature", { status: 401 });
     }
 
